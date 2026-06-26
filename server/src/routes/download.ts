@@ -28,9 +28,10 @@ router.post('/download', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'URL is required' });
       return;
     }
-    const q = quality || 'hd';
-    const downloadUrl = await getDownloadUrl(url, q);
-    res.json({ success: true, downloadUrl, filename: `snapdrop-${q}.mp4` });
+    const q = quality || 'no-watermark';
+    const { url: downloadUrl, filename } = await getDownloadUrl(url, q);
+    const ext = q === 'mp3' ? '.mp3' : q.startsWith('photo') ? '.jpg' : '.mp4';
+    res.json({ success: true, downloadUrl, filename: `${filename}${ext}` });
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({

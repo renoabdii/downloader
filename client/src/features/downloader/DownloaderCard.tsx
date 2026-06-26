@@ -8,7 +8,7 @@ import { VideoPreview } from './VideoPreview';
 import { Toast } from '../../components/Toast';
 import { useDownload } from '../../hooks/useDownload';
 import { DownloadOption } from '../../types';
-import { getDownloadUrl } from '../../utils/api';
+import { getDownloadUrl, downloadFile } from '../../utils/api';
 import { useHistory } from '../../hooks/useHistory';
 
 export function DownloaderCard() {
@@ -20,11 +20,11 @@ export function DownloaderCard() {
   const handleDownload = useCallback(async (option: DownloadOption) => {
     setDownloading(option.quality);
     try {
-      const { downloadUrl } = await getDownloadUrl(currentUrl || option.url, option.quality);
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-      setToast({ message: 'Download started!', type: 'success' });
+      const { downloadUrl, filename } = await getDownloadUrl(currentUrl || option.url, option.quality);
+      await downloadFile(downloadUrl, filename);
+      setToast({ message: 'Download selesai!', type: 'success' });
     } catch {
-      setToast({ message: 'Failed to start download. Please try again.', type: 'error' });
+      setToast({ message: 'Gagal mendownload. Coba lagi.', type: 'error' });
     } finally {
       setDownloading(null);
     }
@@ -35,9 +35,9 @@ export function DownloaderCard() {
     try {
       const { downloadUrl } = await getDownloadUrl(currentUrl || option.url, option.quality);
       await navigator.clipboard.writeText(downloadUrl);
-      setToast({ message: 'Download link copied to clipboard!', type: 'success' });
+      setToast({ message: 'Link disalin ke clipboard!', type: 'success' });
     } catch {
-      setToast({ message: 'Failed to copy link', type: 'error' });
+      setToast({ message: 'Gagal menyalin link', type: 'error' });
     } finally {
       setDownloading(null);
     }

@@ -23,3 +23,16 @@ export async function getDownloadUrl(url: string, quality: string): Promise<{ do
   if (!data.success) throw new Error(data.error || 'Failed to get download URL');
   return { downloadUrl: data.downloadUrl, filename: data.filename };
 }
+
+export async function downloadFile(downloadUrl: string, filename: string): Promise<void> {
+  const resp = await fetch(downloadUrl, { signal: AbortSignal.timeout(120000) });
+  if (!resp.ok) throw new Error('Download failed');
+  const blob = await resp.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
