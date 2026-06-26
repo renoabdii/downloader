@@ -1,6 +1,6 @@
 export function isValidTikTokUrl(url: string): boolean {
   const patterns = [
-    /^https?:\/\/(www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/i,
+    /^https?:\/\/(www\.)?tiktok\.com\/@[\w.-]+\/(video|photo|image)\/\d+/i,
     /^https?:\/\/(vm\.|vt\.)?tiktok\.com\/[\w]+\/?/i,
     /^https?:\/\/m\.tiktok\.com\/v\/\d+/i,
   ];

@@ -46,23 +46,36 @@ async function tryScraper(url: string): Promise<VideoData | null> {
 
     if (!result || !result.media || result.media.length === 0) return null;
 
-    const m = result.media[0];
     const options: DownloadOption[] = [];
+    const hasVideo = result.media.some(m => m.type === 'video');
+    const images = result.media.filter(m => m.type === 'image');
 
-    if (m.url) options.push({ quality: 'no-watermark', label: 'Without Watermark', url: m.url, size: 'N/A' });
-    if (m.wm_url) options.push({ quality: 'with-watermark', label: 'With Watermark', url: m.wm_url, size: 'N/A' });
-    const audioUrl = m.audio_url || result.music_info?.audio_url;
-    if (audioUrl) options.push({ quality: 'mp3', label: 'MP3 Audio', url: audioUrl, size: 'N/A' });
+    if (hasVideo) {
+      const video = result.media.find(m => m.type === 'video') || result.media[0];
+      if (video.url) options.push({ quality: 'no-watermark', label: 'Without Watermark', url: video.url, size: 'N/A' });
+      if (video.wm_url) options.push({ quality: 'with-watermark', label: 'With Watermark', url: video.wm_url, size: 'N/A' });
+      const audioUrl = video.audio_url || result.music_info?.audio_url;
+      if (audioUrl) options.push({ quality: 'mp3', label: 'MP3 Audio', url: audioUrl, size: 'N/A' });
+    }
+
+    if (images.length === 1 && images[0].url) {
+      options.push({ quality: 'photo', label: 'Download Image', url: images[0].url, size: 'N/A' });
+    } else if (images.length > 1) {
+      images.forEach((img, i) => {
+        if (img.url) options.push({ quality: `photo-${i + 1}`, label: `Image ${i + 1}`, url: img.url, size: 'N/A' });
+      });
+    }
 
     if (options.length === 0) return null;
 
+    const first = result.media[0];
     return {
-      id: result.id || m.id || 'unknown',
-      title: m.caption || 'TikTok Video',
+      id: result.id || first.id || 'unknown',
+      title: first.caption || (images.length > 1 ? 'TikTok Photo' : 'TikTok Video'),
       author: `@${result.username || result.name || 'unknown'}`,
       authorAvatar: result.profilePicture || `https://api.dicebear.com/8.x/avataaars/svg?seed=${encodeURIComponent(result.username || 'tiktok')}`,
-      thumbnail: m.thumbnail || `https://picsum.photos/seed/${result.id}/640/360`,
-      duration: fmtDur(m.video_duration ? Math.round(m.video_duration) : undefined),
+      thumbnail: first.thumbnail || `https://picsum.photos/seed/${result.id}/640/360`,
+      duration: hasVideo ? fmtDur(result.media.find(m => m.type === 'video')?.video_duration ? Math.round(result.media.find(m => m.type === 'video')!.video_duration!) : undefined) : (images.length > 1 ? `${images.length} images` : 'Photo'),
       views: 'N/A',
       likes: 'N/A',
       downloadOptions: options,
