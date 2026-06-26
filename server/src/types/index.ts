@@ -15,7 +15,6 @@ export interface VideoData {
   views: string;
   likes: string;
   downloadOptions: DownloadOption[];
-  directVideoUrl?: string;
 }
 
 export interface ApiResponse<T> {

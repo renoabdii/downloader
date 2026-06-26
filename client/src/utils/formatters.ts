@@ -1,5 +1,8 @@
 export function formatNumber(num: string): string {
-  const n = parseFloat(num.replace(/[^0-9.]/g, ''));
+  const cleaned = num.replace(/[^0-9.]/g, '');
+  if (!cleaned) return num;
+  const n = parseFloat(cleaned);
+  if (isNaN(n)) return num;
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return num;

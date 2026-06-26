@@ -5,11 +5,12 @@ import { formatNumber } from '../../utils/formatters';
 
 interface VideoPreviewProps {
   data: VideoData;
+  downloading: string | null;
   onDownload: (option: DownloadOption) => void;
   onCopyLink: (option: DownloadOption) => void;
 }
 
-export function VideoPreview({ data, onDownload, onCopyLink }: VideoPreviewProps) {
+export function VideoPreview({ data, downloading, onDownload, onCopyLink }: VideoPreviewProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -47,6 +48,7 @@ export function VideoPreview({ data, onDownload, onCopyLink }: VideoPreviewProps
         </div>
         <DownloadOptions
           options={data.downloadOptions}
+          downloading={downloading}
           onDownload={onDownload}
           onCopyLink={onCopyLink}
         />

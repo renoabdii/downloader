@@ -24,16 +24,19 @@ router.post('/info', async (req: Request, res: Response) => {
 router.post('/download', async (req: Request, res: Response) => {
   try {
     const { url, quality } = req.body;
-    if (!url) {
+    if (!url || typeof url !== 'string') {
       res.status(400).json({ success: false, error: 'URL is required' });
       return;
     }
     const q = quality || 'hd';
     const downloadUrl = await getDownloadUrl(url, q);
     res.json({ success: true, downloadUrl, filename: `snapdrop-${q}.mp4` });
-  } catch {
-    const q = req.body?.quality || 'hd';
-    res.json({ success: true, downloadUrl: '/static/sample.mp4', filename: `snapdrop-${q}.mp4` });
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get download URL',
+    });
   }
 });
 

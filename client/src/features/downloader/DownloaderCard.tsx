@@ -1,9 +1,11 @@
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { URLInput } from './URLInput';
 import { LoadingState } from './LoadingState';
 import { ErrorState } from './ErrorState';
 import { EmptyState } from './EmptyState';
 import { VideoPreview } from './VideoPreview';
+import { Toast } from '../../components/Toast';
 import { useDownload } from '../../hooks/useDownload';
 import { DownloadOption } from '../../types';
 import { getDownloadUrl } from '../../utils/api';
@@ -12,25 +14,34 @@ import { useHistory } from '../../hooks/useHistory';
 export function DownloaderCard() {
   const { state, videoData, error, currentUrl, download, reset } = useDownload();
   const { addEntry } = useHistory();
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const handleDownload = async (option: DownloadOption) => {
+  const handleDownload = useCallback(async (option: DownloadOption) => {
+    setDownloading(option.quality);
     try {
       const { downloadUrl } = await getDownloadUrl(currentUrl || option.url, option.quality);
-      window.open(downloadUrl, '_blank');
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      setToast({ message: 'Download started!', type: 'success' });
     } catch {
-      alert('Failed to start download. Please try again.');
+      setToast({ message: 'Failed to start download. Please try again.', type: 'error' });
+    } finally {
+      setDownloading(null);
     }
-  };
+  }, [currentUrl]);
 
-  const handleCopyLink = async (option: DownloadOption) => {
+  const handleCopyLink = useCallback(async (option: DownloadOption) => {
+    setDownloading(option.quality);
     try {
       const { downloadUrl } = await getDownloadUrl(currentUrl || option.url, option.quality);
       await navigator.clipboard.writeText(downloadUrl);
-      alert('Download link copied to clipboard!');
+      setToast({ message: 'Download link copied to clipboard!', type: 'success' });
     } catch {
-      alert('Failed to copy link');
+      setToast({ message: 'Failed to copy link', type: 'error' });
+    } finally {
+      setDownloading(null);
     }
-  };
+  }, [currentUrl]);
 
   return (
     <section className="max-w-2xl mx-auto px-4 -mt-8 relative z-10">
@@ -48,6 +59,7 @@ export function DownloaderCard() {
         {state === 'success' && videoData && (
           <VideoPreview
             data={videoData}
+            downloading={downloading}
             onDownload={(option) => {
               addEntry({
                 videoId: videoData.id,
@@ -73,6 +85,14 @@ export function DownloaderCard() {
           />
         )}
       </motion.div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </section>
   );
 }

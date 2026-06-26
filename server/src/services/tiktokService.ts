@@ -1,30 +1,5 @@
 import { VideoData, DownloadOption } from '../types/index.js';
 
-const mockVideos: VideoData[] = [
-  {
-    id: 'tiktok-demo-001',
-    title: 'When your code works on the first try 🔥 #programming #developer',
-    author: '@codinglife',
-    authorAvatar: 'https://api.dicebear.com/8.x/avataaars/svg?seed=codinglife',
-    thumbnail: 'https://picsum.photos/seed/video1/640/360',
-    duration: '0:32',
-    views: '2.5M',
-    likes: '892K',
-    downloadOptions: [],
-  },
-  {
-    id: 'tiktok-demo-002',
-    title: 'My cat reacting to cucumber 🐱 #cats #funny',
-    author: '@petlover',
-    authorAvatar: 'https://api.dicebear.com/8.x/avataaars/svg?seed=petlover',
-    thumbnail: 'https://picsum.photos/seed/video2/640/360',
-    duration: '0:15',
-    views: '5.1M',
-    likes: '1.2M',
-    downloadOptions: [],
-  },
-];
-
 interface TikTokScraperMedia {
   id?: string;
   caption?: string;
@@ -76,7 +51,8 @@ async function tryScraper(url: string): Promise<VideoData | null> {
 
     if (m.url) options.push({ quality: 'no-watermark', label: 'Without Watermark', url: m.url, size: 'N/A' });
     if (m.wm_url) options.push({ quality: 'with-watermark', label: 'With Watermark', url: m.wm_url, size: 'N/A' });
-    if (m.audio_url || result.music_info?.audio_url) options.push({ quality: 'mp3', label: 'MP3 Audio', url: m.audio_url || result.music_info!.audio_url!, size: 'N/A' });
+    const audioUrl = m.audio_url || result.music_info?.audio_url;
+    if (audioUrl) options.push({ quality: 'mp3', label: 'MP3 Audio', url: audioUrl, size: 'N/A' });
 
     if (options.length === 0) return null;
 
@@ -91,46 +67,44 @@ async function tryScraper(url: string): Promise<VideoData | null> {
       likes: 'N/A',
       downloadOptions: options,
     };
-  } catch {
+  } catch (err) {
+    console.error('TikTok scraper failed:', err);
     return null;
   }
 }
 
+const TIKTOK_DOMAINS = ['tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com', 'm.tiktok.com', 'douyin.com'];
+
+function isValidTikTokUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return TIKTOK_DOMAINS.some(domain => parsed.hostname === domain || parsed.hostname.endsWith('.' + domain));
+  } catch {
+    return false;
+  }
+}
+
 export async function extractVideoInfo(url: string): Promise<VideoData> {
-  const isValid = /tiktok\.com|vm\.tiktok|vt\.tiktok|douyin\.com/i.test(url);
-  if (!isValid) {
+  if (!isValidTikTokUrl(url)) {
     throw new Error('Invalid TikTok URL. Please enter a valid TikTok video URL.');
   }
 
   const real = await tryScraper(url);
   if (real) return real;
 
-  const idx = Math.floor(Math.random() * mockVideos.length);
-  const mock = { ...mockVideos[idx] };
-  mock.downloadOptions = [
-    { quality: 'hd', label: 'HD (1080p)', url: '/static/sample.mp4', size: '12.4 MB' },
-    { quality: 'sd', label: 'SD (720p)', url: '/static/sample.mp4', size: '6.2 MB' },
-    { quality: 'no-watermark', label: 'Without Watermark', url: '/static/sample.mp4', size: '8.1 MB' },
-    { quality: 'with-watermark', label: 'With Watermark', url: '/static/sample.mp4', size: '8.5 MB' },
-    { quality: 'mp3', label: 'MP3 Audio', url: '/static/sample.mp3', size: '3.1 MB' },
-  ];
-  return mock;
+  throw new Error('Failed to extract video. TikTok is temporarily unavailable or the video does not exist.');
 }
 
 export async function getDownloadUrl(videoUrl: string, quality: string): Promise<string> {
   const real = await tryScraper(videoUrl);
-  if (real) {
-    const opt = real.downloadOptions.find(o => o.quality === quality);
-    if (opt?.url) return opt.url;
-    if (real.downloadOptions[0]?.url) return real.downloadOptions[0].url;
+  if (!real) {
+    throw new Error('Failed to fetch video. Please try again later.');
   }
 
-  const fallbackUrls: Record<string, string> = {
-    hd: '/static/sample.mp4',
-    sd: '/static/sample.mp4',
-    'no-watermark': '/static/sample.mp4',
-    'with-watermark': '/static/sample.mp4',
-    mp3: '/static/sample.mp3',
-  };
-  return fallbackUrls[quality] || '/static/sample.mp4';
+  const opt = real.downloadOptions.find(o => o.quality === quality);
+  if (opt?.url) return opt.url;
+
+  if (real.downloadOptions[0]?.url) return real.downloadOptions[0].url;
+
+  throw new Error('No download URL available for this video.');
 }
