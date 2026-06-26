@@ -44,10 +44,12 @@ function sleep(ms: number): Promise<void> {
 
 async function getFileSize(url: string): Promise<string> {
   try {
-    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-    const len = resp.headers.get('content-length');
+    const resp = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: AbortSignal.timeout(5000) });
+    const total = resp.headers.get('content-range')?.match(/\/(\d+)$/)?.[1];
+    const len = total || resp.headers.get('content-length');
     if (!len) return 'N/A';
     const bytes = parseInt(len, 10);
+    if (bytes <= 0) return 'N/A';
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
