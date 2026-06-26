@@ -145,15 +145,6 @@ function setCache(url: string, data: VideoData): void {
   }
 }
 
-function sanitizeFilename(title: string): string {
-  return title
-    .replace(/[<>:"/\\|?*]/g, '')
-    .replace(/\s+/g, '_')
-    .substring(0, 80)
-    .replace(/_+$/, '')
-    || 'tiktok';
-}
-
 export async function extractVideoInfo(url: string): Promise<VideoData> {
   if (!isValidTikTokUrl(url)) {
     throw new Error('Invalid TikTok URL. Please enter a valid TikTok video URL.');
@@ -181,9 +172,9 @@ export async function getDownloadUrl(videoUrl: string, quality: string): Promise
   if (!cached && data) setCache(videoUrl, data);
 
   const opt = data.downloadOptions.find(o => o.quality === quality);
-  if (opt?.url) return { url: opt.url, filename: `${sanitizeFilename(data.title)}-${quality}` };
+  if (opt?.url) return { url: opt.url, filename: `snapdrop-${quality}` };
 
-  if (data.downloadOptions[0]?.url) return { url: data.downloadOptions[0].url, filename: `${sanitizeFilename(data.title)}-${data.downloadOptions[0].quality}` };
+  if (data.downloadOptions[0]?.url) return { url: data.downloadOptions[0].url, filename: `snapdrop-${data.downloadOptions[0].quality}` };
 
   throw new Error('No download URL available for this video.');
 }
