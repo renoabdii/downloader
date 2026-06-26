@@ -15,7 +15,7 @@ function sleep(ms: number): Promise<void> {
 
 async function getFileSize(url: string): Promise<string> {
   try {
-    const resp = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: AbortSignal.timeout(5000) });
+    const resp = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: AbortSignal.timeout(8000) });
     const total = resp.headers.get('content-range')?.match(/\/(\d+)$/)?.[1];
     const len = total || resp.headers.get('content-length');
     if (!len) return 'N/A';
@@ -29,54 +29,146 @@ async function getFileSize(url: string): Promise<string> {
   }
 }
 
+interface TTSearchItem {
+  id?: string;
+  desc?: string;
+  createTime?: number;
+  video?: {
+    id?: string;
+    duration?: number;
+    cover?: string;
+    originCover?: string;
+    playAddr?: string;
+    downloadAddr?: string;
+    width?: number;
+    height?: number;
+  };
+  author?: {
+    id?: string;
+    uniqueId?: string;
+    nickname?: string;
+    avatarThumb?: string;
+    avatarMedium?: string;
+  };
+  music?: {
+    id?: string;
+    title?: string;
+    playUrl?: string;
+  };
+  stats?: {
+    playCount?: number;
+    diggCount?: number;
+    commentCount?: number;
+    shareCount?: number;
+  };
+  imagePost?: {
+    images?: Array<{ imageURL?: { urlList?: string[] } }>;
+  };
+}
+
+interface TTSearchResult {
+  status_code?: number;
+  itemInfo?: { itemStruct?: TTSearchItem };
+  data?: string | { items?: TTSearchItem[] };
+}
+
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+];
+
 async function tryScraper(url: string): Promise<VideoData | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const { Downloader } = await import('@tobyg74/tiktok-api-dl');
-      const res = await Downloader(url, { version: 'v3' }) as { status: string; result?: Record<string, any> };
+      const ua = USER_AGENTS[attempt % USER_AGENTS.length];
+      const headers = {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://www.tiktok.com/',
+      };
 
-      if (res?.status !== 'success' || !res.result) {
-        if (attempt === 0) await sleep(1500);
-        continue;
+      const htmlResp = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+      if (!htmlResp.ok) {
+        if (attempt === 0) { await sleep(1500); continue; }
+        return null;
       }
 
-      const r = res.result;
+      const html = await htmlResp.text();
+
+      const dataMatch = html.match(/window\.__UNIVERSAL_DATA_FOR_VIEW__\s*=\s*({.*?});/s)
+        || html.match(/<script\s+id="__UNIVERSAL_DATA_FOR_VIEW__"\s+type="application\/json">(.*?)<\/script>/s);
+
+      let item: TTSearchItem | undefined;
+
+      if (dataMatch) {
+        try {
+          const parsed: TTSearchResult = JSON.parse(dataMatch[1]);
+          item = parsed?.itemInfo?.itemStruct || parsed?.data as TTSearchItem;
+        } catch { }
+      }
+
+      if (!item) {
+        const sigiMatch = html.match(/<script[^>]*>window\.SIGI_STATE\s*=\s*({.*?});<\/script>/s);
+        if (sigiMatch) {
+          try {
+            const sigi = JSON.parse(sigiMatch[1]);
+            const firstId = Object.keys(sigi?.ItemModule || {})[0];
+            if (firstId) item = sigi.ItemModule[firstId];
+          } catch { }
+        }
+      }
+
+      if (!item) {
+        if (attempt === 0) { await sleep(1500); continue; }
+        return null;
+      }
+
       const options: DownloadOption[] = [];
 
-      if (r.videoWatermark) {
-        options.push({ quality: 'with-watermark', label: 'With Watermark', url: r.videoWatermark, size: 'N/A' });
+      const playAddr = item.video?.playAddr || item.video?.downloadAddr;
+      if (playAddr) {
+        options.push({ quality: 'no-watermark', label: 'Without Watermark', url: playAddr, size: 'N/A' });
       }
 
-      if (r.videoHD) {
-        options.push({ quality: 'no-watermark', label: 'Without Watermark', url: r.videoHD, size: 'N/A' });
-      } else if (r.videoSD) {
-        options.push({ quality: 'no-watermark', label: 'Without Watermark', url: r.videoSD, size: 'N/A' });
+      if (item.video?.downloadAddr && item.video?.downloadAddr !== playAddr) {
+        options.push({ quality: 'with-watermark', label: 'With Watermark', url: item.video.downloadAddr, size: 'N/A' });
       }
 
-      if (r.music?.playUrl?.[0]) {
-        options.push({ quality: 'mp3', label: 'MP3 Audio', url: r.music.playUrl[0], size: 'N/A' });
+      if (item.music?.playUrl) {
+        options.push({ quality: 'mp3', label: 'MP3 Audio', url: item.music.playUrl, size: 'N/A' });
       }
 
-      if (r.images?.length) {
-        r.images.forEach((imgUrl: string, i: number) => {
-          options.push({ quality: `photo-${i + 1}`, label: r.images.length === 1 ? 'Download Image' : `Image ${i + 1}`, url: imgUrl, size: 'N/A' });
+      if (item.imagePost?.images?.length) {
+        item.imagePost.images.forEach((img, i) => {
+          const imgUrl = img.imageURL?.urlList?.[0];
+          if (imgUrl) {
+            options.push({ quality: `photo-${i + 1}`, label: item.imagePost!.images!.length === 1 ? 'Download Image' : `Image ${i + 1}`, url: imgUrl, size: 'N/A' });
+          }
         });
       }
 
-      if (options.length === 0) return null;
+      if (options.length === 0) {
+        if (attempt === 0) { await sleep(1500); continue; }
+        return null;
+      }
 
       const sizes = await Promise.all(options.map(o => getFileSize(o.url)));
       sizes.forEach((s, i) => { options[i].size = s; });
 
+      const dur = item.video?.duration
+        ? `${Math.floor(item.video.duration / 60)}:${(item.video.duration % 60).toString().padStart(2, '0')}`
+        : (item.imagePost?.images?.length ? `${item.imagePost.images.length} images` : 'N/A');
+
       return {
-        id: r.id || 'unknown',
-        title: r.desc || (r.images?.length ? 'TikTok Photo' : 'TikTok Video'),
-        author: r.author?.nickname || '@unknown',
-        authorAvatar: r.author?.avatar || `https://api.dicebear.com/8.x/avataaars/svg?seed=unknown`,
-        thumbnail: r.video?.cover?.[0] || r.video?.originCover?.[0] || `https://picsum.photos/seed/${r.id}/640/360`,
-        duration: r.video?.duration ? `${Math.floor(r.video.duration / 60)}:${(r.video.duration % 60).toString().padStart(2, '0')}` : (r.images?.length ? `${r.images.length} images` : 'N/A'),
-        views: fmtCount(r.statistics?.playCount),
-        likes: fmtCount(r.statistics?.likeCount),
+        id: item.id || 'unknown',
+        title: item.desc || (item.imagePost?.images?.length ? 'TikTok Photo' : 'TikTok Video'),
+        author: item.author?.nickname ? `@${item.author.nickname}` : '@unknown',
+        authorAvatar: item.author?.avatarMedium || item.author?.avatarThumb || `https://api.dicebear.com/8.x/avataaars/svg?seed=unknown`,
+        thumbnail: item.video?.originCover || item.video?.cover || `https://picsum.photos/seed/${item.id}/640/360`,
+        duration: dur,
+        views: fmtCount(item.stats?.playCount),
+        likes: fmtCount(item.stats?.diggCount),
         downloadOptions: options,
       };
     } catch (err) {
