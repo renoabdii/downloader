@@ -11,10 +11,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", 'https://*.tiktokcdn.com', 'https://*.byteicdn.com', 'https://api.dicebear.com', 'https://picsum.photos', 'data:'],
+      mediaSrc: ["'self'", 'https://*.tiktokcdn.com', 'https://*.byteicdn.com', 'blob:'],
+      connectSrc: ["'self'", 'https://*.tiktokcdn.com', 'https://*.byteicdn.com'],
+    },
+  },
+  strictTransportSecurity: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+  },
 }));
+
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors({
+  origin: corsOrigin ? corsOrigin.split(',').map(s => s.trim()) : '*',
+}));
+
 app.use(express.json({ limit: '10kb' }));
 
 const limiter = rateLimit({
