@@ -26,6 +26,11 @@ app.use(helmet({
   },
 }));
 
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()');
+  next();
+});
+
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors({
   origin: corsOrigin ? corsOrigin.split(',').map(s => s.trim()) : '*',
