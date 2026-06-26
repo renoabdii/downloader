@@ -88,6 +88,24 @@ async function tryScraper(url: string): Promise<VideoData | null> {
 
 const TIKTOK_DOMAINS = ['tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com', 'm.tiktok.com', 'douyin.com'];
 
+const cache = new Map<string, { data: VideoData; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
+
+function getCached(url: string): VideoData | undefined {
+  const entry = cache.get(url);
+  if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  cache.delete(url);
+  return undefined;
+}
+
+function setCache(url: string, data: VideoData): void {
+  cache.set(url, { data, ts: Date.now() });
+  if (cache.size > 200) {
+    const first = cache.keys().next().value;
+    if (first) cache.delete(first);
+  }
+}
+
 function isValidTikTokUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -102,22 +120,31 @@ export async function extractVideoInfo(url: string): Promise<VideoData> {
     throw new Error('Invalid TikTok URL. Please enter a valid TikTok video URL.');
   }
 
+  const cached = getCached(url);
+  if (cached) return cached;
+
   const real = await tryScraper(url);
-  if (real) return real;
+  if (real) {
+    setCache(url, real);
+    return real;
+  }
 
   throw new Error('Failed to extract video. TikTok is temporarily unavailable or the video does not exist.');
 }
 
 export async function getDownloadUrl(videoUrl: string, quality: string): Promise<string> {
-  const real = await tryScraper(videoUrl);
-  if (!real) {
+  const cached = getCached(videoUrl);
+  const data = cached || await tryScraper(videoUrl);
+  if (!data) {
     throw new Error('Failed to fetch video. Please try again later.');
   }
 
-  const opt = real.downloadOptions.find(o => o.quality === quality);
+  if (!cached && data) setCache(videoUrl, data);
+
+  const opt = data.downloadOptions.find(o => o.quality === quality);
   if (opt?.url) return opt.url;
 
-  if (real.downloadOptions[0]?.url) return real.downloadOptions[0].url;
+  if (data.downloadOptions[0]?.url) return data.downloadOptions[0].url;
 
   throw new Error('No download URL available for this video.');
 }
