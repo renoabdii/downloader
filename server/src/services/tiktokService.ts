@@ -1,7 +1,4 @@
 import { VideoData, DownloadOption } from '../types/index.js';
-import { createRequire } from 'module';
-
-const _require = createRequire(import.meta.url);
 
 function fmtCount(n?: string | number): string {
   if (!n) return 'N/A';
@@ -35,15 +32,15 @@ async function getFileSize(url: string): Promise<string> {
 async function tryScraper(url: string): Promise<VideoData | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const { Downloader } = _require('@tobyg74/tiktok-api-dl');
-      const result = await Downloader(url, { version: 'v3' });
+      const { Downloader } = await import('@tobyg74/tiktok-api-dl');
+      const res = await Downloader(url, { version: 'v3' }) as { status: string; result?: Record<string, any> };
 
-      if (result?.status !== 'success' || !result.result) {
+      if (res?.status !== 'success' || !res.result) {
         if (attempt === 0) await sleep(1500);
         continue;
       }
 
-      const r = result.result;
+      const r = res.result;
       const options: DownloadOption[] = [];
 
       if (r.videoWatermark) {

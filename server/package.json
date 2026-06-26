@@ -13,6 +13,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
+    "@tobyg74/tiktok-api-dl": "^1.3.7",
     "permissions-policy": "^0.6.0",
     "zod": "^4.4.3"
   },
