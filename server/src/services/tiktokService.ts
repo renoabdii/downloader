@@ -1,41 +1,15 @@
 import { VideoData, DownloadOption } from '../types/index.js';
+import { createRequire } from 'module';
 
-interface TikTokScraperMedia {
-  id?: string;
-  caption?: string;
-  thumbnail?: string;
-  type?: string;
-  url?: string;
-  mimetype?: string;
-  has_audio?: boolean;
-  video_duration?: number;
-  audio_url?: string;
-  wm_url?: string;
-}
+const _require = createRequire(import.meta.url);
 
-interface TikTokScraperResult {
-  id?: string;
-  username?: string;
-  name?: string;
-  profilePicture?: string;
-  media?: TikTokScraperMedia[];
-  music_info?: {
-    title?: string;
-    author?: string;
-    audio_url?: string;
-  };
-}
-
-function fmtCount(n?: number): string {
+function fmtCount(n?: string | number): string {
   if (!n) return 'N/A';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.0', '') + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace('.0', '') + 'K';
-  return n.toString();
-}
-
-function fmtDur(s?: number): string {
-  if (!s) return '0:00';
-  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const num = typeof n === 'string' ? parseInt(n, 10) : n;
+  if (isNaN(num)) return 'N/A';
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1).replace('.0', '') + 'M';
+  if (num >= 1_000) return (num / 1_000).toFixed(1).replace('.0', '') + 'K';
+  return num.toString();
 }
 
 function sleep(ms: number): Promise<void> {
@@ -61,29 +35,34 @@ async function getFileSize(url: string): Promise<string> {
 async function tryScraper(url: string): Promise<VideoData | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const mod = await import('tiktok-video-scraper');
-      const Tiktok = mod.default as (url: string, opts?: { parse?: boolean }) => Promise<TikTokScraperResult>;
-      const result = await Tiktok(url, { parse: true });
+      const { Downloader } = _require('@tobyg74/tiktok-api-dl');
+      const result = await Downloader(url, { version: 'v3' });
 
-      if (!result || !result.media || result.media.length === 0) return null;
-
-      const options: DownloadOption[] = [];
-      const hasVideo = result.media.some(m => m.type === 'video');
-      const images = result.media.filter(m => m.type === 'image');
-
-      if (hasVideo) {
-        const video = result.media.find(m => m.type === 'video') || result.media[0];
-        if (video.url) options.push({ quality: 'no-watermark', label: 'Without Watermark', url: video.url, size: 'N/A' });
-        if (video.wm_url) options.push({ quality: 'with-watermark', label: 'With Watermark', url: video.wm_url, size: 'N/A' });
-        const audioUrl = video.audio_url || result.music_info?.audio_url;
-        if (audioUrl) options.push({ quality: 'mp3', label: 'MP3 Audio', url: audioUrl, size: 'N/A' });
+      if (result?.status !== 'success' || !result.result) {
+        if (attempt === 0) await sleep(1500);
+        continue;
       }
 
-      if (images.length === 1 && images[0].url) {
-        options.push({ quality: 'photo', label: 'Download Image', url: images[0].url, size: 'N/A' });
-      } else if (images.length > 1) {
-        images.forEach((img, i) => {
-          if (img.url) options.push({ quality: `photo-${i + 1}`, label: `Image ${i + 1}`, url: img.url, size: 'N/A' });
+      const r = result.result;
+      const options: DownloadOption[] = [];
+
+      if (r.videoWatermark) {
+        options.push({ quality: 'with-watermark', label: 'With Watermark', url: r.videoWatermark, size: 'N/A' });
+      }
+
+      if (r.videoHD) {
+        options.push({ quality: 'no-watermark', label: 'Without Watermark', url: r.videoHD, size: 'N/A' });
+      } else if (r.videoSD) {
+        options.push({ quality: 'no-watermark', label: 'Without Watermark', url: r.videoSD, size: 'N/A' });
+      }
+
+      if (r.music?.playUrl?.[0]) {
+        options.push({ quality: 'mp3', label: 'MP3 Audio', url: r.music.playUrl[0], size: 'N/A' });
+      }
+
+      if (r.images?.length) {
+        r.images.forEach((imgUrl: string, i: number) => {
+          options.push({ quality: `photo-${i + 1}`, label: r.images.length === 1 ? 'Download Image' : `Image ${i + 1}`, url: imgUrl, size: 'N/A' });
         });
       }
 
@@ -92,20 +71,15 @@ async function tryScraper(url: string): Promise<VideoData | null> {
       const sizes = await Promise.all(options.map(o => getFileSize(o.url)));
       sizes.forEach((s, i) => { options[i].size = s; });
 
-      const first = result.media[0];
-      const dur = hasVideo
-        ? fmtDur(Math.round((result.media.find(m => m.type === 'video') || result.media[0])?.video_duration || 0))
-        : (images.length > 1 ? `${images.length} images` : 'Photo');
-
       return {
-        id: result.id || first.id || 'unknown',
-        title: first.caption || (images.length > 1 ? 'TikTok Photo' : 'TikTok Video'),
-        author: `@${result.username || result.name || 'unknown'}`,
-        authorAvatar: result.profilePicture || `https://api.dicebear.com/8.x/avataaars/svg?seed=${encodeURIComponent(result.username || 'tiktok')}`,
-        thumbnail: first.thumbnail || `https://picsum.photos/seed/${result.id}/640/360`,
-        duration: dur,
-        views: 'N/A',
-        likes: 'N/A',
+        id: r.id || 'unknown',
+        title: r.desc || (r.images?.length ? 'TikTok Photo' : 'TikTok Video'),
+        author: r.author?.nickname || '@unknown',
+        authorAvatar: r.author?.avatar || `https://api.dicebear.com/8.x/avataaars/svg?seed=unknown`,
+        thumbnail: r.video?.cover?.[0] || r.video?.originCover?.[0] || `https://picsum.photos/seed/${r.id}/640/360`,
+        duration: r.video?.duration ? `${Math.floor(r.video.duration / 60)}:${(r.video.duration % 60).toString().padStart(2, '0')}` : (r.images?.length ? `${r.images.length} images` : 'N/A'),
+        views: fmtCount(r.statistics?.playCount),
+        likes: fmtCount(r.statistics?.likeCount),
         downloadOptions: options,
       };
     } catch (err) {
