@@ -96,15 +96,20 @@ async function tryScraper(url: string): Promise<VideoData | null> {
 
       const html = await htmlResp.text();
 
-      const dataMatch = html.match(/window\.__UNIVERSAL_DATA_FOR_VIEW__\s*=\s*({.*?});/s)
+      const dataMatch = html.match(/__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application\/json">({.*?})<\/script>/s)
+        || html.match(/window\.__UNIVERSAL_DATA_FOR_VIEW__\s*=\s*({.*?});/s)
         || html.match(/<script\s+id="__UNIVERSAL_DATA_FOR_VIEW__"\s+type="application\/json">(.*?)<\/script>/s);
 
       let item: TTSearchItem | undefined;
 
       if (dataMatch) {
         try {
-          const parsed: TTSearchResult = JSON.parse(dataMatch[1]);
-          item = parsed?.itemInfo?.itemStruct || parsed?.data as TTSearchItem;
+          const parsed = JSON.parse(dataMatch[1]);
+          const scope = parsed?.__DEFAULT_SCOPE__;
+          const videoDetail = scope?.['webapp.video-detail'];
+          item = videoDetail?.itemInfo?.itemStruct
+            || parsed?.ItemModule?.[Object.keys(parsed?.ItemModule || {})[0]]
+            || parsed?.itemInfo?.itemStruct;
         } catch { }
       }
 
